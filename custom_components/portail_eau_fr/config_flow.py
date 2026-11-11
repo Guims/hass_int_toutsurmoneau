@@ -92,7 +92,7 @@ class MyConfigFlow(ConfigFlow, domain=DOMAIN):
                     # no error: go to next step
                     return await self.async_step_get_identifier()
                 except Exception as e:  # pylint: disable=broad-except
-                    _LOGGER.exception('Error: %s',e)
+                    _LOGGER.warning('Erreur de communication Suez pendant la configuration (détails masqués)')
                     errors_for_form['base'] = 'unknown'
             else:
                 errors_for_form['base'] = 'login_failed'
@@ -138,7 +138,7 @@ class MyConfigFlow(ConfigFlow, domain=DOMAIN):
         # input was provided (second call)
         if user_input is not None:
             try:
-                _LOGGER.debug('Got input %s', user_input)
+                _LOGGER.debug('Identifiant de compteur saisi (valeur masquée)')
                 client: toutsurmoneau.AsyncClient = self.data['client']
                 client._id = user_input[USER_INPUT_METER_ID]
                 # check by getting meter specific data

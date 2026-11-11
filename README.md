@@ -2,7 +2,7 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 
-Version 0.0.13
+Version 0.0.14
 
 Home assistant integration for Suez tout sur mon eau
 
@@ -17,7 +17,7 @@ Home assistant integration for Suez tout sur mon eau
 
 - For the address enter this github address:
 
-  <https://github.com/laurent-martin/hass_int_toutsurmoneau>
+  <https://github.com/Guims/hass_int_toutsurmoneau>
 
 - Then, search: "tout"
 
@@ -59,19 +59,18 @@ This can be used as "Water source" that can be monitored.
 
 I plan to add the possibility to provision all available history back into Home Assistant.
 
-## Debug
+## Protection du compte Suez (version 0.0.14)
 
-To activate debug level, edit the configuration.yaml file and add:
+- Mise à jour automatique de l'index toutes les 24 heures.
+- Suppression de la vérification d'identifiants au redémarrage de Home Assistant.
+- Consultation d'un mois, éventuellement du mois précédent, sans boucle de répétition sur erreur.
+- Après toute erreur réseau ou Suez, suspension des appels pour 24 heures, persistante après redémarrage. Les autres erreurs (y compris une absence temporaire de relevé) déclenchent également cette suspension.
+- Pour lever la suspension après changement de mot de passe, supprimer puis recréer l'entrée de configuration. Ne pas redémarrer en boucle.
+- Attention : la bibliothèque externe `toutsurmoneau==0.0.27` effectue encore une authentification automatique si le site renvoie vers la connexion. Il n'est donc **pas garanti** que Suez ne bloque plus le compte. Procéder à un essai progressif.
+- **Ne jamais activer le niveau DEBUG pour `toutsurmoneau`** : la bibliothèque externe peut journaliser des cookies, jetons et informations d'authentification.
+- Si le compte est bloqué, désactiver l'intégration et contacter Suez. Ne pas recommencer la connexion en boucle.
 
-```yaml
-logger:
-  default: info
-  logs:
-    toutsurmoneau: debug
-    custom_components.toutsurmoneau: debug
-```
-
-## Development
+## Développement
 
 ```bash
 make bumpver
