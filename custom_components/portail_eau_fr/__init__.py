@@ -79,7 +79,12 @@ class SafeSuezClient:
                 if day <= today.day and value is not None
             ]
             if readings:
-                return {"volume": max(readings)[1]}
+                day, index = max(readings)
+                return {
+                    "volume": index,
+                    "daily_volume": monthly["daily"].get(day),
+                    "reading_date": today.replace(day=day).isoformat(),
+                }
             # Les premiers jours du mois, le dernier index peut dater du mois précédent.
             previous_month = today.replace(day=1) - timedelta(days=1)
             monthly = await self._client.async_daily_for_month(previous_month)
@@ -88,7 +93,12 @@ class SafeSuezClient:
                 if value is not None
             ]
             if readings:
-                return {"volume": max(readings)[1]}
+                day, index = max(readings)
+                return {
+                    "volume": index,
+                    "daily_volume": monthly["daily"].get(day),
+                    "reading_date": previous_month.replace(day=day).isoformat(),
+                }
             raise ValueError("Aucun index de compteur disponible")
         except Exception:
             self._block()

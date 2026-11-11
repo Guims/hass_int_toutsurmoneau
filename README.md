@@ -2,7 +2,7 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 
-Version 0.0.16
+Version 0.0.17
 
 Home assistant integration for Suez tout sur mon eau
 
@@ -59,7 +59,7 @@ This can be used as "Water source" that can be monitored.
 
 I plan to add the possibility to provision all available history back into Home Assistant.
 
-## Protection du compte Suez (version 0.0.16)
+## Protection du compte Suez (version 0.0.17)
 
 - Mise à jour automatique de l'index toutes les 24 heures.
 - Suppression de la vérification d'identifiants au redémarrage de Home Assistant.
@@ -80,4 +80,34 @@ make release
 
 ## Dépendance corrigée
 
-La v0.0.16 dépend du fork [Guims/py-mon-eau](https://github.com/Guims/py-mon-eau), commit `1ec88cb39148c2805cb0d3f1a1921a4ae96870bd`, et non de la version PyPI 0.0.27. Home Assistant installe la dépendance via Git ; cette installation doit pouvoir accéder à GitHub et disposer de Git. En cas d'échec, vérifier le journal d'installation des dépendances avant toute nouvelle tentative auprès de Suez.
+La v0.0.17 dépend du fork [Guims/py-mon-eau](https://github.com/Guims/py-mon-eau), commit `1ec88cb39148c2805cb0d3f1a1921a4ae96870bd`, et non de la version PyPI 0.0.27. Home Assistant installe la dépendance via Git ; cette installation doit pouvoir accéder à GitHub et disposer de Git. En cas d'échec, vérifier le journal d'installation des dépendances avant toute nouvelle tentative auprès de Suez.
+
+
+## Dernière consommation quotidienne publiée par Suez (v0.0.17)
+
+Le capteur d'index existant `sensor.suez_meter_3853929616` publie maintenant deux attributs :
+
+- `derniere_consommation_jour_l` : consommation en litres pour le dernier jour avec index valide ;
+- `date_derniere_consommation` : date réelle (AAAA-MM-JJ) du jour correspondant.
+
+Ces données viennent de la **même réponse** API que l'index total : aucune requête réseau supplémentaire. L'index et son identifiant d'entité ne changent pas. Cette date est celle du relevé Suez, pas celle du jour présent.
+
+Dans une configuration `template:` existante, ajouter un nouveau bloc au niveau des autres éléments `- sensor:` :
+
+```yaml
+- sensor:
+    - name: "SUEZ dernier jour disponible"
+      unique_id: suez_dernier_jour_disponible
+      icon: mdi:water-check
+      unit_of_measurement: "L"
+      state_class: measurement
+      availability: >
+        {{ is_number(state_attr('sensor.suez_meter_3853929616', 'derniere_consommation_jour_l')) }}
+      state: >
+        {{ state_attr('sensor.suez_meter_3853929616', 'derniere_consommation_jour_l') | float(0) | round(0) }}
+      attributes:
+        date_releve: >
+          {{ state_attr('sensor.suez_meter_3853929616', 'date_derniere_consommation') }}
+```
+
+Ne pas déclarer `device_class: water` avec `state_class: measurement`, car Home Assistant 2026.11 considère cette combinaison incompatible. Le capteur est une consommation **du dernier jour publié**, il n'est pas équivalent au compteur `utility_meter` du jour civil en cours.

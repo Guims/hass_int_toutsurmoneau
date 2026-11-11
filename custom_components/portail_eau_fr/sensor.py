@@ -45,12 +45,18 @@ class ToutSurMonEauEntity(SensorEntity):
         self._attr_unique_id = "unique_id_with_meter"
         self._attr_name = f"Suez meter {api.meter_id}"
         self._attr_native_value = None
+        self._attr_extra_state_attributes = {}
 
     async def async_update(self) -> None:
         """Lire la donnée ; laisser la dernière valeur si Suez est indisponible."""
         try:
             reading = await self._api.async_latest_meter_reading()
             self._attr_native_value = reading["volume"]
+            # Ces attributs réutilisent la réponse API du relevé, sans requête supplémentaire.
+            self._attr_extra_state_attributes = {
+                "derniere_consommation_jour_l": reading["daily_volume"],
+                "date_derniere_consommation": reading["reading_date"],
+            }
         except Exception:
             # La période de blocage est gérée et persistée par SafeSuezClient.
             # Pas de traceback : certains détails HTTP peuvent être sensibles.
