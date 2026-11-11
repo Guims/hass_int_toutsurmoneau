@@ -2,7 +2,7 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 
-Version 0.0.14
+Version 0.0.15
 
 Home assistant integration for Suez tout sur mon eau
 
@@ -59,15 +59,15 @@ This can be used as "Water source" that can be monitored.
 
 I plan to add the possibility to provision all available history back into Home Assistant.
 
-## Protection du compte Suez (version 0.0.14)
+## Protection du compte Suez (version 0.0.15)
 
 - Mise à jour automatique de l'index toutes les 24 heures.
 - Suppression de la vérification d'identifiants au redémarrage de Home Assistant.
 - Consultation d'un mois, éventuellement du mois précédent, sans boucle de répétition sur erreur.
 - Après toute erreur réseau ou Suez, suspension des appels pour 24 heures, persistante après redémarrage. Les autres erreurs (y compris une absence temporaire de relevé) déclenchent également cette suspension.
 - Pour lever la suspension après changement de mot de passe, supprimer puis recréer l'entrée de configuration. Ne pas redémarrer en boucle.
-- Attention : la bibliothèque externe `toutsurmoneau==0.0.27` effectue encore une authentification automatique si le site renvoie vers la connexion. Il n'est donc **pas garanti** que Suez ne bloque plus le compte. Procéder à un essai progressif.
-- **Ne jamais activer le niveau DEBUG pour `toutsurmoneau`** : la bibliothèque externe peut journaliser des cookies, jetons et informations d'authentification.
+- Attention : la version corrigée `toutsurmoneau` 0.0.28 est installée directement depuis le fork `Guims/py-mon-eau` (commit épinglé). Une seule authentification est autorisée par instance de client, et aucune réauthentification automatique n'est effectuée après une session expirée. Il n'est **pas garanti** que Suez ne bloque plus le compte : procéder à un essai progressif.
+- **Ne jamais activer le niveau DEBUG pour `toutsurmoneau`** : la sécurité des journaux est renforcée dans le fork, mais il est préférable de laisser le niveau INFO pendant les tests.
 - Si le compte est bloqué, désactiver l'intégration et contacter Suez. Ne pas recommencer la connexion en boucle.
 
 ## Développement
@@ -76,3 +76,8 @@ I plan to add the possibility to provision all available history back into Home 
 make bumpver
 make release
 ```
+
+
+## Dépendance corrigée
+
+La v0.0.15 dépend du fork [Guims/py-mon-eau](https://github.com/Guims/py-mon-eau), commit `8859010973cd9d6474527c734b1afa9046280b22`, et non de la version PyPI 0.0.27. Home Assistant installe la dépendance via Git ; cette installation doit pouvoir accéder à GitHub et disposer de Git. En cas d'échec, vérifier le journal d'installation des dépendances avant toute nouvelle tentative auprès de Suez.
