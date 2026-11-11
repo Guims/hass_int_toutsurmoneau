@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import timedelta
+from datetime import date, timedelta
 
 import toutsurmoneau
 from homeassistant.config_entries import ConfigEntry, ConfigEntryNotReady
@@ -69,8 +69,30 @@ class SafeSuezClient:
         return await self._call("async_contracts")
 
     async def async_latest_meter_reading(self):
-        """Dernier relevé de compteur."""
-        return await self._call("async_latest_meter_reading")
+        """Lire au maximum deux mois, sans répétition cachée en cas d'erreur."""
+        self._check_cooldown()
+        today = date.today()
+        try:
+            monthly = await self._client.async_daily_for_month(today)
+            readings = [
+                (day, value) for day, value in monthly["absolute"].items()
+                if day <= today.day and value is not None
+            ]
+            if readings:
+                return {"volume": max(readings)[1]}
+            # Les premiers jours du mois, le dernier index peut dater du mois précédent.
+            previous_month = today.replace(day=1) - timedelta(days=1)
+            monthly = await self._client.async_daily_for_month(previous_month)
+            readings = [
+                (day, value) for day, value in monthly["absolute"].items()
+                if value is not None
+            ]
+            if readings:
+                return {"volume": max(readings)[1]}
+            raise ValueError("Aucun index de compteur disponible")
+        except Exception:
+            self._block()
+            raise
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
