@@ -25,7 +25,9 @@ async def async_setup_entry(
 ) -> None:
     """Créer le capteur ; aucun appel réseau n'est déclenché ici."""
     api = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([ToutSurMonEauEntity(api)])
+    # Premier relevé dès l'ajout, puis actualisation automatique toutes les 24 h.
+    # Le délai de sécurité persistant empêche les essais répétés après une erreur.
+    async_add_entities([ToutSurMonEauEntity(api)], update_before_add=True)
 
 
 class ToutSurMonEauEntity(SensorEntity):
