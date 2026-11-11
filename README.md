@@ -2,7 +2,7 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 
-Version 0.0.15
+Version 0.0.16
 
 Home assistant integration for Suez tout sur mon eau
 
@@ -59,7 +59,7 @@ This can be used as "Water source" that can be monitored.
 
 I plan to add the possibility to provision all available history back into Home Assistant.
 
-## Protection du compte Suez (version 0.0.15)
+## Protection du compte Suez (version 0.0.16)
 
 - Mise à jour automatique de l'index toutes les 24 heures.
 - Suppression de la vérification d'identifiants au redémarrage de Home Assistant.
@@ -80,4 +80,4 @@ make release
 
 ## Dépendance corrigée
 
-La v0.0.15 dépend du fork [Guims/py-mon-eau](https://github.com/Guims/py-mon-eau), commit `1ec88cb39148c2805cb0d3f1a1921a4ae96870bd`, et non de la version PyPI 0.0.27. Home Assistant installe la dépendance via Git ; cette installation doit pouvoir accéder à GitHub et disposer de Git. En cas d'échec, vérifier le journal d'installation des dépendances avant toute nouvelle tentative auprès de Suez.
+La v0.0.16 dépend du fork [Guims/py-mon-eau](https://github.com/Guims/py-mon-eau), commit `1ec88cb39148c2805cb0d3f1a1921a4ae96870bd`, et non de la version PyPI 0.0.27. Home Assistant installe la dépendance via Git ; cette installation doit pouvoir accéder à GitHub et disposer de Git. En cas d'échec, vérifier le journal d'installation des dépendances avant toute nouvelle tentative auprès de Suez.
