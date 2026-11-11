@@ -11,7 +11,7 @@
   "issue_tracker": "https://github.com/Guims/hass_int_toutsurmoneau/issues",
   "iot_class": "cloud_polling",
   "requirements": [
-    "toutsurmoneau@git+https://github.com/Guims/py-mon-eau.git@8859010973cd9d6474527c734b1afa9046280b22"
+    "toutsurmoneau@git+https://github.com/Guims/py-mon-eau.git@1ec88cb39148c2805cb0d3f1a1921a4ae96870bd"
   ],
   "loggers": [
     "portail_eau_fr",
