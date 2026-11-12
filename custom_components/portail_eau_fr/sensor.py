@@ -63,6 +63,9 @@ class ToutSurMonEauEntity(RestoreEntity, SensorEntity):
                 if key in last_state.attributes
             }
 
+        self._api.set_last_known_reading_date(
+            self._attr_extra_state_attributes.get("date_derniere_consommation")
+        )
         self._set_diagnostic_attributes()
 
         self.async_on_remove(
@@ -124,6 +127,7 @@ class ToutSurMonEauEntity(RestoreEntity, SensorEntity):
                 "derniere_consommation_jour_l": reading["daily_volume"],
                 "date_derniere_consommation": reading["reading_date"],
             }
+            self._api.set_last_known_reading_date(reading["reading_date"])
             self._set_diagnostic_attributes()
         except Exception:
             # La période de blocage est gérée et persistée par SafeSuezClient.
