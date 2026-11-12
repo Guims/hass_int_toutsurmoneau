@@ -69,6 +69,22 @@ class SafeSuezClient:
         """Liste des contrats Suez."""
         return await self._call("async_contracts")
 
+    @property
+    def last_request_time(self) -> str | None:
+        """Date et heure de la dernière tentative Suez enregistrée."""
+        return self._entry.data.get("last_suez_request_time")
+
+    @property
+    def last_request_result(self) -> str | None:
+        """Dernier résultat observable, sans détails HTTP sensibles."""
+        return self._entry.data.get("last_suez_request_result")
+
+    def _save_request_result(self, result: str) -> None:
+        self._hass.config_entries.async_update_entry(
+            self._entry,
+            data={**self._entry.data, "last_suez_request_result": result},
+        )
+
     def _request_slot(self) -> str:
         """Séparer le rattrapage avant 16 h du rendez-vous de 16 h."""
         return "startup" if dt_util.now().hour < 16 else "scheduled"
@@ -105,7 +121,12 @@ class SafeSuezClient:
         )
         today = dt_util.now().date().isoformat()
         self._hass.config_entries.async_update_entry(
-            self._entry, data={**self._entry.data, key: today}
+            self._entry, data={
+                **self._entry.data,
+                key: today,
+                "last_suez_request_time": dt_util.now().isoformat(),
+                "last_suez_request_result": "en_cours",
+            }
         )
 
     async def async_latest_meter_reading(self):
@@ -120,6 +141,7 @@ class SafeSuezClient:
                 if day <= today.day and value is not None
             ]
             if readings:
+                self._save_request_result("reussi")
                 day, index = max(readings)
                 return {
                     "volume": index,
@@ -134,6 +156,7 @@ class SafeSuezClient:
                 if value is not None
             ]
             if readings:
+                self._save_request_result("reussi")
                 day, index = max(readings)
                 return {
                     "volume": index,
@@ -142,6 +165,7 @@ class SafeSuezClient:
                 }
             raise ValueError("Aucun index de compteur disponible")
         except Exception:
+            self._save_request_result("echec")
             self._block()
             raise
 
