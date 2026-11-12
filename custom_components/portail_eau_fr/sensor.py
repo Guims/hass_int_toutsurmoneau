@@ -87,7 +87,10 @@ class ToutSurMonEauEntity(RestoreEntity, SensorEntity):
             _LOGGER.info("Rattrapage du relevé Suez au démarrage")
             self.async_schedule_update_ha_state(force_refresh=True)
         else:
-            _LOGGER.info("Rattrapage Suez ignoré : créneau déjà tenté ou suspendu")
+            _LOGGER.info(
+                "Rattrapage Suez ignoré : %s",
+                self._api.request_diagnostics["suez_decision_releve"],
+            )
 
     def _set_diagnostic_attributes(self) -> None:
         """Exposer les dernières tentatives sans effectuer de requête HTTP."""
@@ -105,6 +108,11 @@ class ToutSurMonEauEntity(RestoreEntity, SensorEntity):
         self.async_write_ha_state()
         if self._api.should_refresh_today():
             self.async_schedule_update_ha_state(force_refresh=True)
+        else:
+            _LOGGER.info(
+                "Relevé Suez de 16 h ignoré : %s",
+                self._api.request_diagnostics["suez_decision_releve"],
+            )
 
     async def async_update(self) -> None:
         """Lire la donnée ; laisser la dernière valeur si Suez est indisponible."""
