@@ -81,6 +81,8 @@ class ToutSurMonEauEntity(RestoreEntity, SensorEntity):
     @callback
     def _startup_refresh(self, now: datetime) -> None:
         """Exécuter le rattrapage après l'ajout complet du capteur."""
+        self._set_diagnostic_attributes()
+        self.async_write_ha_state()
         if self._api.should_refresh_today():
             _LOGGER.info("Rattrapage du relevé Suez au démarrage")
             self.async_schedule_update_ha_state(force_refresh=True)
@@ -90,6 +92,7 @@ class ToutSurMonEauEntity(RestoreEntity, SensorEntity):
     def _set_diagnostic_attributes(self) -> None:
         """Exposer les dernières tentatives sans effectuer de requête HTTP."""
         self._attr_extra_state_attributes.update({
+            **self._api.request_diagnostics,
             "derniere_tentative_suez": self._api.last_request_time,
             "resultat_derniere_tentative_suez": self._api.last_request_result or "aucune",
             "suez_suspendu_jusquau": self._api.blocked_until,
@@ -98,6 +101,8 @@ class ToutSurMonEauEntity(RestoreEntity, SensorEntity):
     @callback
     def _scheduled_refresh(self, now: datetime) -> None:
         """Relevé de 16 h, indépendant de celui du matin."""
+        self._set_diagnostic_attributes()
+        self.async_write_ha_state()
         if self._api.should_refresh_today():
             self.async_schedule_update_ha_state(force_refresh=True)
 
