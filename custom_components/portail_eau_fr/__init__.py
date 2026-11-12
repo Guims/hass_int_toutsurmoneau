@@ -99,6 +99,33 @@ class SafeSuezClient:
         """Séparer le rattrapage avant 16 h du rendez-vous de 16 h."""
         return "startup" if dt_util.now().hour < 16 else "scheduled"
 
+    @property
+    def request_diagnostics(self) -> dict:
+        """Informations locales expliquant les décisions de relève."""
+        now = dt_util.now()
+        today = now.date().isoformat()
+        slot = self._request_slot()
+        key = (
+            "last_suez_startup_request_date"
+            if slot == "startup"
+            else "last_suez_scheduled_request_date"
+        )
+        if time.time() < float(self._entry.data.get("blocked_until", 0)):
+            reason = "suspension_24h"
+        elif self._entry.data.get(key) == today:
+            reason = "creneau_deja_tente"
+        elif slot == "startup" and self._entry.data.get("last_suez_request_date") == today:
+            reason = "ancienne_limite_journaliere"
+        else:
+            reason = "autorise"
+        return {
+            "suez_creneau_actuel": slot,
+            "suez_decision_releve": reason,
+            "suez_date_tentative_avant_16h": self._entry.data.get("last_suez_startup_request_date"),
+            "suez_date_tentative_apres_16h": self._entry.data.get("last_suez_scheduled_request_date"),
+            "suez_ancienne_date_tentative": self._entry.data.get("last_suez_request_date"),
+        }
+
     def should_refresh_today(self) -> bool:
         """Autoriser une relève matinale ET celle de 16 h, sans doublons."""
         now = dt_util.now()
