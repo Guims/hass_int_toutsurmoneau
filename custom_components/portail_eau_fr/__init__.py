@@ -29,6 +29,7 @@ class SafeSuezClient:
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self._hass = hass
         self._entry = entry
+        self._last_known_reading_date: date | None = None
         self._client = toutsurmoneau.AsyncClient(
             username=entry.data["username"],
             password=entry.data["password"],
@@ -102,6 +103,33 @@ class SafeSuezClient:
         )
         _LOGGER.info("Relevé Suez : étape %s", stage)
 
+    def set_last_known_reading_date(self, reading_date: str | None) -> None:
+        """Enregistrer la date du capteur restauré sans appel réseau."""
+        if not reading_date:
+            return
+        try:
+            parsed = date.fromisoformat(str(reading_date)[:10])
+        except (TypeError, ValueError):
+            return
+        if parsed <= dt_util.now().date() and (
+            self._last_known_reading_date is None
+            or parsed > self._last_known_reading_date
+        ):
+            self._last_known_reading_date = parsed
+
+    @property
+    def expected_reading_date(self) -> date:
+        """Suez publie la veille vers 16 h, selon le rythme observé."""
+        now = dt_util.now()
+        days_back = 1 if now.hour >= 16 else 2
+        return now.date() - timedelta(days=days_back)
+
+    def _readings_up_to_date(self) -> bool:
+        return (
+            self._last_known_reading_date is not None
+            and self._last_known_reading_date >= self.expected_reading_date
+        )
+
     def _request_slot(self) -> str:
         """Séparer le rattrapage avant 16 h du rendez-vous de 16 h."""
         return "startup" if dt_util.now().hour < 16 else "scheduled"
@@ -117,7 +145,9 @@ class SafeSuezClient:
             if slot == "startup"
             else "last_suez_scheduled_request_date"
         )
-        if time.time() < float(self._entry.data.get("blocked_until", 0)):
+        if self._readings_up_to_date():
+            reason = "releve_deja_a_jour"
+        elif time.time() < float(self._entry.data.get("blocked_until", 0)):
             reason = "suspension_24h"
         elif self._entry.data.get(key) == today:
             reason = "creneau_deja_tente"
@@ -127,6 +157,8 @@ class SafeSuezClient:
             reason = "autorise"
         return {
             "suez_creneau_actuel": slot,
+            "suez_date_releve_attendue": self.expected_reading_date.isoformat(),
+            "suez_date_releve_connue": self._last_known_reading_date.isoformat() if self._last_known_reading_date else None,
             "suez_decision_releve": reason,
             "suez_date_tentative_avant_16h": self._entry.data.get("last_suez_startup_request_date"),
             "suez_date_tentative_apres_16h": self._entry.data.get("last_suez_scheduled_request_date"),
@@ -141,6 +173,8 @@ class SafeSuezClient:
         """Autoriser une relève matinale ET celle de 16 h, sans doublons."""
         now = dt_util.now()
         today = now.date().isoformat()
+        if self._readings_up_to_date():
+            return False
         if time.time() < float(self._entry.data.get("blocked_until", 0)):
             return False
         slot = self._request_slot()
@@ -185,6 +219,7 @@ class SafeSuezClient:
             self._entry,
             data={**self._entry.data, "last_suez_returned_reading_date": value},
         )
+        self.set_last_known_reading_date(value)
         self._save_request_stage("reussi")
 
     async def async_latest_meter_reading(self):
