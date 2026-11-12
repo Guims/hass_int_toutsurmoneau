@@ -2,7 +2,7 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 
-Version 0.0.24
+Version 0.0.25
 
 Home assistant integration for Suez tout sur mon eau
 
@@ -59,7 +59,7 @@ This can be used as "Water source" that can be monitored.
 
 I plan to add the possibility to provision all available history back into Home Assistant.
 
-## Protection du compte Suez (version 0.0.24)
+## Protection du compte Suez (version 0.0.25)
 
 - Mise à jour automatique de l'index toutes les 24 heures.
 - Suppression de la vérification d'identifiants au redémarrage de Home Assistant.
@@ -80,10 +80,10 @@ make release
 
 ## Dépendance corrigée
 
-La v0.0.24 dépend du fork [Guims/py-mon-eau](https://github.com/Guims/py-mon-eau), commit `1ec88cb39148c2805cb0d3f1a1921a4ae96870bd`, et non de la version PyPI 0.0.27. Home Assistant installe la dépendance via Git ; cette installation doit pouvoir accéder à GitHub et disposer de Git. En cas d'échec, vérifier le journal d'installation des dépendances avant toute nouvelle tentative auprès de Suez.
+La v0.0.25 dépend du fork [Guims/py-mon-eau](https://github.com/Guims/py-mon-eau), commit `1ec88cb39148c2805cb0d3f1a1921a4ae96870bd`, et non de la version PyPI 0.0.27. Home Assistant installe la dépendance via Git ; cette installation doit pouvoir accéder à GitHub et disposer de Git. En cas d'échec, vérifier le journal d'installation des dépendances avant toute nouvelle tentative auprès de Suez.
 
 
-## Dernière consommation quotidienne publiée par Suez (v0.0.24)
+## Dernière consommation quotidienne publiée par Suez (v0.0.25)
 
 Le capteur d'index existant `sensor.suez_meter_3853929616` publie maintenant deux attributs :
 
@@ -113,7 +113,7 @@ Dans une configuration `template:` existante, ajouter un nouveau bloc au niveau 
 Ne pas déclarer `device_class: water` avec `state_class: measurement`, car Home Assistant 2026.11 considère cette combinaison incompatible. Le capteur est une consommation **du dernier jour publié**, il n'est pas équivalent au compteur `utility_meter` du jour civil en cours.
 
 
-## Relevé quotidien à 16 h (version 0.0.24)
+## Relevé quotidien à 16 h (version 0.0.25)
 
 Le compteur interroge Suez **chaque jour à 16:00, dans le fuseau horaire configuré dans Home Assistant** (Europe/Paris si le système est configuré en France). Il n'effectue plus de requête au redémarrage de Home Assistant. La dernière valeur d'index et ses attributs (consommation et date du relevé Suez) sont restaurés depuis le dernier état enregistré.
 
@@ -122,14 +122,14 @@ Pour éviter les risques de blocage du compte Suez, une limite persistante autor
 À noter : l'heure de publication annoncée par Suez ne garantit pas que la donnée soit déjà disponible à la seconde 16:00.
 
 
-## Rattrapage au démarrage (v0.0.24)
+## Rattrapage au démarrage (v0.0.25)
 
 En plus du rendez-vous quotidien à 16 h (fuseau horaire Home Assistant), le capteur effectue **un relevé au démarrage si aucun relevé n'a été tenté durant la date locale en cours**. Ce rattrapage peut donc être effectué avant 16 h : dans ce cas, le passage de 16 h est ignoré pour éviter un deuxième appel le même jour. Si une tentative a déjà été faite aujourd'hui, aucun nouveau relevé n'est déclenché lors du redémarrage.
 
 La date de tentative et le verrou de sécurité de 24 heures après erreur restent persistants. Les valeurs précédentes du capteur sont restaurées en attendant la prochaine lecture autorisée. Il n'y a jamais de rafale de rattrapages pour plusieurs jours manqués.
 
 
-## Deux créneaux distincts (v0.0.24)
+## Deux créneaux distincts (v0.0.25)
 
 - **Démarrage avant 16 h :** une interrogation Suez si aucune n'a déjà été tentée dans ce créneau le jour même. Plusieurs redémarrages n'entraînent pas d'autres requêtes matinales.
 - **À 16 h :** une nouvelle interrogation, **même si un relevé a eu lieu à 8 h**. Une seule tentative pour ce créneau chaque jour.
@@ -140,23 +140,30 @@ La date de tentative et le verrou de sécurité de 24 heures après erreur reste
 Ce comportement fait **au maximum deux interrogations de télémétrie par jour** (une avant 16 h, une à partir de 16 h). La bibliothèque peut effectuer des échanges HTTP supplémentaires pour l'authentification, et la lecture du mois précédent peut nécessiter une seconde interrogation de télémétrie lorsque le mois courant ne contient encore aucun relevé.
 
 
-## Diagnostic local de la relève (v0.0.24)
+## Diagnostic local de la relève (v0.0.25)
 
 Le capteur de compteur expose deux attributs supplémentaires : `derniere_tentative_suez` et `resultat_derniere_tentative_suez` (valeurs : `aucune`, `en_cours`, `reussi`, `echec`). Ces informations sont enregistrées dans les paramètres de l'intégration et restaurées après redémarrage : **leur affichage ne crée aucune requête supplémentaire**. Une tentative réussie peut conserver le même index si Suez n'a pas encore publié de nouvelle mesure. Les limites de tentatives et la suspension de 24 heures restent inchangées.
 
 
-## Rattrapage différé et visibilité de la suspension (v0.0.24)
+## Rattrapage différé et visibilité de la suspension (v0.0.25)
 
 Le rattrapage au démarrage est désormais déclenché **trois secondes après l'ajout complet du capteur** pour éviter une mise à jour trop précoce. Le créneau de 16 h reste indépendant du rattrapage effectué avant 16 h. Le capteur affiche aussi `suez_suspendu_jusquau`, avec la fin du verrou de sécurité de 24 h s'il est actif (`null` sinon). Les attributs de diagnostic ne déclenchent aucun appel supplémentaire. Les tentatives antérieures non enregistrées ne peuvent pas être reconstituées rétroactivement.
 
 
-## Diagnostic des créneaux sans appel réseau (v0.0.24)
+## Diagnostic des créneaux sans appel réseau (v0.0.25)
 
 Les attributs du capteur exposent le créneau local, la raison d'un éventuel refus de relève (`suez_decision_releve`), ainsi que les dates de tentatives enregistrées par les versions précédentes et actuelles. Au démarrage (après trois secondes) et à 16 h, ces attributs sont actualisés **sans lancer de requête supplémentaire**. Une date de tentative enregistrée sous une version précédente peut donc expliquer un diagnostic `aucune` avec une relève ignorée. Ne pas effacer les verrous manuellement : ils protègent le compte Suez.
 
 
-## Diagnostic précis de la requête (v0.0.24)
+## Diagnostic précis de la requête (v0.0.25)
 
 La date du créneau est toujours réservée **avant** l'accès Suez pour éviter tout doublon, mais le suivi distingue désormais les étapes `reserve`, `appel_lance`, `reponse_recue`, `appel_mois_precedent`, `reussi` et `echec`. Le capteur affiche `suez_etape_derniere_tentative`, `suez_heure_derniere_etape`, `suez_type_derniere_erreur` et `suez_date_releve_retournee`. Le diagnostic ne lit pas le site Suez : ce sont des métadonnées locales de la relève déjà prévue. Une réponse valide peut contenir un relevé ancien. Les tentatives des anciennes versions sans métadonnées ne peuvent pas être reconstituées.
 
 La protection 24 h et les créneaux de démarrage / 16 h sont conservés. Aucun renouvellement de tentative n'est déclenché par cette version quand le créneau est déjà réservé.
+
+
+## Relève basée sur la date réellement publiée (v0.0.25)
+
+La planification compare désormais la date de consommation **réellement publiée par Suez** (restaurée depuis le dernier état Home Assistant ou mémorisée après une réponse réussie) avec la date attendue : **avant 16 h, avant-hier ; à partir de 16 h, hier** (fuseau horaire Home Assistant). Si la date connue est déjà suffisante, aucune requête n'est nécessaire, même après redémarrage. Sinon, l'intégration peut interroger Suez au démarrage ou à 16 h, dans les limites des créneaux persistants existants.
+
+Nouveaux attributs de diagnostic : `suez_date_releve_attendue`, `suez_date_releve_connue`, et motif `suez_decision_releve: releve_deja_a_jour`. Les verrous de tentative de la journée ne sont **pas** effacés en cas de données anciennes : cela évite toute boucle d'appels si Suez tarde à publier les données. En cas d'erreur, la suspension de 24 h reste prioritaire. Pas de nouvel endpoint ou d'appel supplémentaire.
