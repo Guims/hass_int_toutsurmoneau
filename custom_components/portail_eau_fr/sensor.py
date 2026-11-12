@@ -1,4 +1,4 @@
-"""Capteur de compteur Suez, une actualisation par jour."""
+"""Capteur Suez : rattrapage au démarrage et relève à 16 h."""
 from __future__ import annotations
 
 import logging
@@ -69,14 +69,15 @@ class ToutSurMonEauEntity(RestoreEntity, SensorEntity):
             )
         )
 
-        # Une relève manquée (ou une première installation) est rattrapée
-        # au démarrage, mais jamais deux fois le même jour.
+        # Avant 16 h : une relève au démarrage (sans doublon après redémarrage).
+        # À 16 h : nouvelle relève autorisée, même après celle du matin.
+        # Après 16 h : rattrapage si le créneau de 16 h a été manqué.
         if self._api.should_refresh_today():
             self.async_schedule_update_ha_state(force_refresh=True)
 
     @callback
     def _scheduled_refresh(self, now: datetime) -> None:
-        """Actualisation quotidienne, une fois à 16 h heure locale HA."""
+        """Relevé de 16 h, indépendant de celui du matin."""
         if self._api.should_refresh_today():
             self.async_schedule_update_ha_state(force_refresh=True)
 
