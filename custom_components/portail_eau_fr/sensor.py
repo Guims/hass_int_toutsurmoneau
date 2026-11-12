@@ -63,6 +63,8 @@ class ToutSurMonEauEntity(RestoreEntity, SensorEntity):
                 if key in last_state.attributes
             }
 
+        self._set_diagnostic_attributes()
+
         self.async_on_remove(
             async_track_time_change(
                 self.hass, self._scheduled_refresh, hour=16, minute=0, second=0
@@ -74,6 +76,13 @@ class ToutSurMonEauEntity(RestoreEntity, SensorEntity):
         # Après 16 h : rattrapage si le créneau de 16 h a été manqué.
         if self._api.should_refresh_today():
             self.async_schedule_update_ha_state(force_refresh=True)
+
+    def _set_diagnostic_attributes(self) -> None:
+        """Exposer les dernières tentatives sans effectuer de requête HTTP."""
+        self._attr_extra_state_attributes.update({
+            "derniere_tentative_suez": self._api.last_request_time,
+            "resultat_derniere_tentative_suez": self._api.last_request_result or "aucune",
+        })
 
     @callback
     def _scheduled_refresh(self, now: datetime) -> None:
@@ -91,7 +100,9 @@ class ToutSurMonEauEntity(RestoreEntity, SensorEntity):
                 "derniere_consommation_jour_l": reading["daily_volume"],
                 "date_derniere_consommation": reading["reading_date"],
             }
+            self._set_diagnostic_attributes()
         except Exception:
             # La période de blocage est gérée et persistée par SafeSuezClient.
             # Pas de traceback : certains détails HTTP peuvent être sensibles.
+            self._set_diagnostic_attributes()
             _LOGGER.warning("Relevé Suez non actualisé ; dernière valeur conservée")
