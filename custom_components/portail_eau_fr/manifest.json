@@ -1,6 +1,6 @@
 {
   "domain": "portail_eau_fr",
-  "version": "0.0.18",
+  "version": "0.0.19",
   "name": "Tout sur mon eau",
   "codeowners": [
     "@Guims"
