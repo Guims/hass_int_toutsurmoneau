@@ -13,7 +13,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfVolume
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.event import async_call_later, async_track_time_change
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.core import callback
 
@@ -74,14 +74,25 @@ class ToutSurMonEauEntity(RestoreEntity, SensorEntity):
         # Avant 16 h : une relève au démarrage (sans doublon après redémarrage).
         # À 16 h : nouvelle relève autorisée, même après celle du matin.
         # Après 16 h : rattrapage si le créneau de 16 h a été manqué.
+        self.async_on_remove(
+            async_call_later(self.hass, 3, self._startup_refresh)
+        )
+
+    @callback
+    def _startup_refresh(self, now: datetime) -> None:
+        """Exécuter le rattrapage après l'ajout complet du capteur."""
         if self._api.should_refresh_today():
+            _LOGGER.info("Rattrapage du relevé Suez au démarrage")
             self.async_schedule_update_ha_state(force_refresh=True)
+        else:
+            _LOGGER.info("Rattrapage Suez ignoré : créneau déjà tenté ou suspendu")
 
     def _set_diagnostic_attributes(self) -> None:
         """Exposer les dernières tentatives sans effectuer de requête HTTP."""
         self._attr_extra_state_attributes.update({
             "derniere_tentative_suez": self._api.last_request_time,
             "resultat_derniere_tentative_suez": self._api.last_request_result or "aucune",
+            "suez_suspendu_jusquau": self._api.blocked_until,
         })
 
     @callback
