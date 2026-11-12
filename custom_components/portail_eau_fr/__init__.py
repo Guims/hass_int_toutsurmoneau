@@ -30,6 +30,7 @@ class SafeSuezClient:
         self._hass = hass
         self._entry = entry
         self._last_known_reading_date: date | None = None
+        self.set_last_known_reading_date(entry.data.get("last_suez_returned_reading_date"))
         self._client = toutsurmoneau.AsyncClient(
             username=entry.data["username"],
             password=entry.data["password"],
