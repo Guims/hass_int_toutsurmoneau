@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import datetime
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -13,11 +13,13 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfVolume
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.core import callback
 
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
-SCAN_INTERVAL = timedelta(hours=24)
 
 
 async def async_setup_entry(
@@ -25,19 +27,18 @@ async def async_setup_entry(
 ) -> None:
     """Créer le capteur ; aucun appel réseau n'est déclenché ici."""
     api = hass.data[DOMAIN][entry.entry_id]
-    # Premier relevé dès l'ajout, puis actualisation automatique toutes les 24 h.
-    # Le délai de sécurité persistant empêche les essais répétés après une erreur.
-    async_add_entities([ToutSurMonEauEntity(api)], update_before_add=True)
+    # Aucun appel au démarrage ; actualisation planifiée à 16 h.
+    async_add_entities([ToutSurMonEauEntity(api)], update_before_add=False)
 
 
-class ToutSurMonEauEntity(SensorEntity):
+class ToutSurMonEauEntity(RestoreEntity, SensorEntity):
     """Index absolu du compteur d'eau."""
 
     _attr_device_class = SensorDeviceClass.WATER
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
     _attr_native_unit_of_measurement = UnitOfVolume.LITERS
     _attr_icon = "mdi:water-pump"
-    _attr_should_poll = True
+    _attr_should_poll = False
 
     def __init__(self, api) -> None:
         self._api = api
@@ -46,6 +47,32 @@ class ToutSurMonEauEntity(SensorEntity):
         self._attr_name = f"Suez meter {api.meter_id}"
         self._attr_native_value = None
         self._attr_extra_state_attributes = {}
+
+    async def async_added_to_hass(self) -> None:
+        """Restaurer le dernier index puis enregistrer le relevé de 16 h."""
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is not None:
+            try:
+                self._attr_native_value = float(last_state.state)
+            except (TypeError, ValueError):
+                pass
+            self._attr_extra_state_attributes = {
+                key: last_state.attributes[key]
+                for key in ("derniere_consommation_jour_l", "date_derniere_consommation")
+                if key in last_state.attributes
+            }
+
+        self.async_on_remove(
+            async_track_time_change(
+                self.hass, self._scheduled_refresh, hour=16, minute=0, second=0
+            )
+        )
+
+    @callback
+    def _scheduled_refresh(self, now: datetime) -> None:
+        """Actualisation quotidienne, une fois à 16 h heure locale HA."""
+        self.async_schedule_update_ha_state(force_refresh=True)
 
     async def async_update(self) -> None:
         """Lire la donnée ; laisser la dernière valeur si Suez est indisponible."""

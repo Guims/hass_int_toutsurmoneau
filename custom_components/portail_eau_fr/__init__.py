@@ -10,6 +10,7 @@ from homeassistant.config_entries import ConfigEntry, ConfigEntryNotReady
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, VERSION
 
@@ -68,10 +69,25 @@ class SafeSuezClient:
         """Liste des contrats Suez."""
         return await self._call("async_contracts")
 
+    def _check_and_mark_daily_request(self) -> None:
+        """Maximum une interrogation par date, à partir de 16 h (heure HA)."""
+        now = dt_util.now()
+        if now.hour < 16:
+            raise RuntimeError("La relève Suez est prévue après 16 h")
+        today = now.date().isoformat()
+        if self._entry.data.get("last_suez_request_date") == today:
+            raise RuntimeError("Suez a déjà été interrogé aujourd'hui")
+        # Enregistrement AVANT l'appel réseau : un redémarrage ne contourne pas la limite.
+        self._hass.config_entries.async_update_entry(
+            self._entry,
+            data={**self._entry.data, "last_suez_request_date": today},
+        )
+
     async def async_latest_meter_reading(self):
         """Lire au maximum deux mois, sans répétition cachée en cas d'erreur."""
         self._check_cooldown()
-        today = date.today()
+        self._check_and_mark_daily_request()
+        today = dt_util.now().date()
         try:
             monthly = await self._client.async_daily_for_month(today)
             readings = [
