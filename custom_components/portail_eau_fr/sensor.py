@@ -64,7 +64,6 @@ class ToutSurMonEauEntity(RestoreEntity, SensorEntity):
             }
 
         self._set_diagnostic_attributes()
-        self.async_write_ha_state()
 
         self.async_on_remove(
             async_track_time_change(
