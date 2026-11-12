@@ -89,11 +89,18 @@ class SafeSuezClient:
         """Dernier résultat observable, sans détails HTTP sensibles."""
         return self._entry.data.get("last_suez_request_result")
 
-    def _save_request_result(self, result: str) -> None:
+    def _save_request_stage(self, stage: str, error_type: str | None = None) -> None:
+        """Conserver le stade atteint, sans secret ni requête additionnelle."""
         self._hass.config_entries.async_update_entry(
             self._entry,
-            data={**self._entry.data, "last_suez_request_result": result},
+            data={
+                **self._entry.data,
+                "last_suez_request_result": stage,
+                "last_suez_request_stage_time": dt_util.now().isoformat(),
+                "last_suez_error_type": error_type,
+            },
         )
+        _LOGGER.info("Relevé Suez : étape %s", stage)
 
     def _request_slot(self) -> str:
         """Séparer le rattrapage avant 16 h du rendez-vous de 16 h."""
@@ -124,6 +131,9 @@ class SafeSuezClient:
             "suez_date_tentative_avant_16h": self._entry.data.get("last_suez_startup_request_date"),
             "suez_date_tentative_apres_16h": self._entry.data.get("last_suez_scheduled_request_date"),
             "suez_ancienne_date_tentative": self._entry.data.get("last_suez_request_date"),
+            "suez_etape_derniere_tentative": self._entry.data.get("last_suez_request_result") or "inconnue",
+            "suez_heure_derniere_etape": self._entry.data.get("last_suez_request_stage_time"),
+            "suez_type_derniere_erreur": self._entry.data.get("last_suez_error_type"),
         }
 
     def should_refresh_today(self) -> bool:
@@ -162,7 +172,9 @@ class SafeSuezClient:
                 **self._entry.data,
                 key: today,
                 "last_suez_request_time": dt_util.now().isoformat(),
-                "last_suez_request_result": "en_cours",
+                "last_suez_request_result": "reserve",
+                "last_suez_request_stage_time": dt_util.now().isoformat(),
+                "last_suez_error_type": None,
             }
         )
 
@@ -172,13 +184,16 @@ class SafeSuezClient:
         self._check_and_mark_daily_request()
         today = dt_util.now().date()
         try:
+            # L'appel commence ici ; la réservation seule n'est pas une réponse Suez.
+            self._save_request_stage("appel_lance")
             monthly = await self._client.async_daily_for_month(today)
+            self._save_request_stage("reponse_recue")
             readings = [
                 (day, value) for day, value in monthly["absolute"].items()
                 if day <= today.day and value is not None
             ]
             if readings:
-                self._save_request_result("reussi")
+                self._save_request_stage("reussi")
                 day, index = max(readings)
                 return {
                     "volume": index,
@@ -187,7 +202,9 @@ class SafeSuezClient:
                 }
             # Les premiers jours du mois, le dernier index peut dater du mois précédent.
             previous_month = today.replace(day=1) - timedelta(days=1)
+            self._save_request_stage("appel_mois_precedent")
             monthly = await self._client.async_daily_for_month(previous_month)
+            self._save_request_stage("reponse_recue")
             readings = [
                 (day, value) for day, value in monthly["absolute"].items()
                 if value is not None
@@ -201,8 +218,10 @@ class SafeSuezClient:
                     "reading_date": previous_month.replace(day=day).isoformat(),
                 }
             raise ValueError("Aucun index de compteur disponible")
-        except Exception:
-            self._save_request_result("echec")
+        except Exception as err:
+            # Le nom de la classe d'exception est suffisant pour diagnostiquer,
+            # sans enregistrer URL, identifiant, mot de passe ou réponse brute.
+            self._save_request_stage("echec", type(err).__name__)
             self._block()
             raise
 
