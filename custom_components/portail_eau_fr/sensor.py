@@ -25,9 +25,9 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Créer le capteur ; aucun appel réseau n'est déclenché ici."""
+    """Créer le capteur et permettre le rattrapage au démarrage."""
     api = hass.data[DOMAIN][entry.entry_id]
-    # Aucun appel au démarrage ; actualisation planifiée à 16 h.
+    # Restaurer l'index, rattraper si nécessaire puis suivre le rendez-vous de 16 h.
     async_add_entities([ToutSurMonEauEntity(api)], update_before_add=False)
 
 
@@ -49,7 +49,7 @@ class ToutSurMonEauEntity(RestoreEntity, SensorEntity):
         self._attr_extra_state_attributes = {}
 
     async def async_added_to_hass(self) -> None:
-        """Restaurer le dernier index puis enregistrer le relevé de 16 h."""
+        """Restaurer l'index, planifier 16 h et rattraper si nécessaire."""
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
         if last_state is not None:
@@ -69,10 +69,16 @@ class ToutSurMonEauEntity(RestoreEntity, SensorEntity):
             )
         )
 
+        # Une relève manquée (ou une première installation) est rattrapée
+        # au démarrage, mais jamais deux fois le même jour.
+        if self._api.should_refresh_today():
+            self.async_schedule_update_ha_state(force_refresh=True)
+
     @callback
     def _scheduled_refresh(self, now: datetime) -> None:
         """Actualisation quotidienne, une fois à 16 h heure locale HA."""
-        self.async_schedule_update_ha_state(force_refresh=True)
+        if self._api.should_refresh_today():
+            self.async_schedule_update_ha_state(force_refresh=True)
 
     async def async_update(self) -> None:
         """Lire la donnée ; laisser la dernière valeur si Suez est indisponible."""
