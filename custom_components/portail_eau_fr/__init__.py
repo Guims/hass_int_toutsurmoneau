@@ -69,25 +69,43 @@ class SafeSuezClient:
         """Liste des contrats Suez."""
         return await self._call("async_contracts")
 
+    def _request_slot(self) -> str:
+        """Séparer le rattrapage avant 16 h du rendez-vous de 16 h."""
+        return "startup" if dt_util.now().hour < 16 else "scheduled"
+
     def should_refresh_today(self) -> bool:
-        """Autoriser un seul relevé par date, sauf suspension de sécurité."""
-        return (
-            self._entry.data.get("last_suez_request_date")
-            != dt_util.now().date().isoformat()
-            and time.time() >= float(self._entry.data.get("blocked_until", 0))
+        """Autoriser une relève matinale ET celle de 16 h, sans doublons."""
+        now = dt_util.now()
+        today = now.date().isoformat()
+        if time.time() < float(self._entry.data.get("blocked_until", 0)):
+            return False
+        slot = self._request_slot()
+        key = (
+            "last_suez_startup_request_date"
+            if slot == "startup"
+            else "last_suez_scheduled_request_date"
         )
+        if self._entry.data.get(key) == today:
+            return False
+        # Compatibilité avec la version 0.0.19 : une tentative déjà enregistrée
+        # aujourd'hui ne doit pas être répétée avant 16 h.
+        if slot == "startup" and self._entry.data.get("last_suez_request_date") == today:
+            return False
+        return True
 
     def _check_and_mark_daily_request(self) -> None:
-        """Maximum une tentative par jour, à 16 h ou en rattrapage au démarrage."""
+        """Réserver durablement le créneau avant tout accès à Suez."""
         if not self.should_refresh_today():
-            raise RuntimeError("Relevé Suez déjà tenté ou temporairement suspendu")
-        # Enregistrer AVANT l'appel réseau, même en cas de redémarrage.
+            raise RuntimeError("Relevé déjà tenté pour ce créneau ou temporairement suspendu")
+        slot = self._request_slot()
+        key = (
+            "last_suez_startup_request_date"
+            if slot == "startup"
+            else "last_suez_scheduled_request_date"
+        )
+        today = dt_util.now().date().isoformat()
         self._hass.config_entries.async_update_entry(
-            self._entry,
-            data={
-                **self._entry.data,
-                "last_suez_request_date": dt_util.now().date().isoformat(),
-            },
+            self._entry, data={**self._entry.data, key: today}
         )
 
     async def async_latest_meter_reading(self):
