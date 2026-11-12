@@ -2,7 +2,7 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 
-Version 0.0.18
+Version 0.0.19
 
 Home assistant integration for Suez tout sur mon eau
 
@@ -59,7 +59,7 @@ This can be used as "Water source" that can be monitored.
 
 I plan to add the possibility to provision all available history back into Home Assistant.
 
-## Protection du compte Suez (version 0.0.18)
+## Protection du compte Suez (version 0.0.19)
 
 - Mise à jour automatique de l'index toutes les 24 heures.
 - Suppression de la vérification d'identifiants au redémarrage de Home Assistant.
@@ -80,10 +80,10 @@ make release
 
 ## Dépendance corrigée
 
-La v0.0.18 dépend du fork [Guims/py-mon-eau](https://github.com/Guims/py-mon-eau), commit `1ec88cb39148c2805cb0d3f1a1921a4ae96870bd`, et non de la version PyPI 0.0.27. Home Assistant installe la dépendance via Git ; cette installation doit pouvoir accéder à GitHub et disposer de Git. En cas d'échec, vérifier le journal d'installation des dépendances avant toute nouvelle tentative auprès de Suez.
+La v0.0.19 dépend du fork [Guims/py-mon-eau](https://github.com/Guims/py-mon-eau), commit `1ec88cb39148c2805cb0d3f1a1921a4ae96870bd`, et non de la version PyPI 0.0.27. Home Assistant installe la dépendance via Git ; cette installation doit pouvoir accéder à GitHub et disposer de Git. En cas d'échec, vérifier le journal d'installation des dépendances avant toute nouvelle tentative auprès de Suez.
 
 
-## Dernière consommation quotidienne publiée par Suez (v0.0.18)
+## Dernière consommation quotidienne publiée par Suez (v0.0.19)
 
 Le capteur d'index existant `sensor.suez_meter_3853929616` publie maintenant deux attributs :
 
@@ -113,10 +113,17 @@ Dans une configuration `template:` existante, ajouter un nouveau bloc au niveau 
 Ne pas déclarer `device_class: water` avec `state_class: measurement`, car Home Assistant 2026.11 considère cette combinaison incompatible. Le capteur est une consommation **du dernier jour publié**, il n'est pas équivalent au compteur `utility_meter` du jour civil en cours.
 
 
-## Relevé quotidien à 16 h (version 0.0.18)
+## Relevé quotidien à 16 h (version 0.0.19)
 
 Le compteur interroge Suez **chaque jour à 16:00, dans le fuseau horaire configuré dans Home Assistant** (Europe/Paris si le système est configuré en France). Il n'effectue plus de requête au redémarrage de Home Assistant. La dernière valeur d'index et ses attributs (consommation et date du relevé Suez) sont restaurés depuis le dernier état enregistré.
 
 Pour éviter les risques de blocage du compte Suez, une limite persistante autorise **une seule tentative d'interrogation par date** à partir de 16 h, même après redémarrage ou actualisation manuelle. Le verrou existant de 24 heures en cas d'erreur reste actif. Si Home Assistant est arrêté à 16 h, la relève prévue est manquée et la prochaine aura lieu à 16 h le lendemain (aucun rattrapage automatique).
 
 À noter : l'heure de publication annoncée par Suez ne garantit pas que la donnée soit déjà disponible à la seconde 16:00.
+
+
+## Rattrapage au démarrage (v0.0.19)
+
+En plus du rendez-vous quotidien à 16 h (fuseau horaire Home Assistant), le capteur effectue **un relevé au démarrage si aucun relevé n'a été tenté durant la date locale en cours**. Ce rattrapage peut donc être effectué avant 16 h : dans ce cas, le passage de 16 h est ignoré pour éviter un deuxième appel le même jour. Si une tentative a déjà été faite aujourd'hui, aucun nouveau relevé n'est déclenché lors du redémarrage.
+
+La date de tentative et le verrou de sécurité de 24 heures après erreur restent persistants. Les valeurs précédentes du capteur sont restaurées en attendant la prochaine lecture autorisée. Il n'y a jamais de rafale de rattrapages pour plusieurs jours manqués.
