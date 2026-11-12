@@ -220,12 +220,13 @@ class SafeSuezClient:
                 if value is not None
             ]
             if readings:
-                self._save_request_result("reussi")
                 day, index = max(readings)
+                published_date = previous_month.replace(day=day).isoformat()
+                self._record_published_date(published_date)
                 return {
                     "volume": index,
                     "daily_volume": monthly["daily"].get(day),
-                    "reading_date": previous_month.replace(day=day).isoformat(),
+                    "reading_date": published_date,
                 }
             raise ValueError("Aucun index de compteur disponible")
         except Exception as err:
