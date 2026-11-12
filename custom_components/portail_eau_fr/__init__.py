@@ -69,18 +69,25 @@ class SafeSuezClient:
         """Liste des contrats Suez."""
         return await self._call("async_contracts")
 
+    def should_refresh_today(self) -> bool:
+        """Autoriser un seul relevé par date, sauf suspension de sécurité."""
+        return (
+            self._entry.data.get("last_suez_request_date")
+            != dt_util.now().date().isoformat()
+            and time.time() >= float(self._entry.data.get("blocked_until", 0))
+        )
+
     def _check_and_mark_daily_request(self) -> None:
-        """Maximum une interrogation par date, à partir de 16 h (heure HA)."""
-        now = dt_util.now()
-        if now.hour < 16:
-            raise RuntimeError("La relève Suez est prévue après 16 h")
-        today = now.date().isoformat()
-        if self._entry.data.get("last_suez_request_date") == today:
-            raise RuntimeError("Suez a déjà été interrogé aujourd'hui")
-        # Enregistrement AVANT l'appel réseau : un redémarrage ne contourne pas la limite.
+        """Maximum une tentative par jour, à 16 h ou en rattrapage au démarrage."""
+        if not self.should_refresh_today():
+            raise RuntimeError("Relevé Suez déjà tenté ou temporairement suspendu")
+        # Enregistrer AVANT l'appel réseau, même en cas de redémarrage.
         self._hass.config_entries.async_update_entry(
             self._entry,
-            data={**self._entry.data, "last_suez_request_date": today},
+            data={
+                **self._entry.data,
+                "last_suez_request_date": dt_util.now().date().isoformat(),
+            },
         )
 
     async def async_latest_meter_reading(self):
