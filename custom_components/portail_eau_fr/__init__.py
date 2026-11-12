@@ -134,6 +134,7 @@ class SafeSuezClient:
             "suez_etape_derniere_tentative": self._entry.data.get("last_suez_request_result") or "inconnue",
             "suez_heure_derniere_etape": self._entry.data.get("last_suez_request_stage_time"),
             "suez_type_derniere_erreur": self._entry.data.get("last_suez_error_type"),
+            "suez_date_releve_retournee": self._entry.data.get("last_suez_returned_reading_date"),
         }
 
     def should_refresh_today(self) -> bool:
@@ -178,6 +179,14 @@ class SafeSuezClient:
             }
         )
 
+    def _record_published_date(self, value: str) -> None:
+        """Mémoriser la date du relevé réellement retourné par Suez."""
+        self._hass.config_entries.async_update_entry(
+            self._entry,
+            data={**self._entry.data, "last_suez_returned_reading_date": value},
+        )
+        self._save_request_stage("reussi")
+
     async def async_latest_meter_reading(self):
         """Lire au maximum deux mois, sans répétition cachée en cas d'erreur."""
         self._check_cooldown()
@@ -193,12 +202,13 @@ class SafeSuezClient:
                 if day <= today.day and value is not None
             ]
             if readings:
-                self._save_request_stage("reussi")
                 day, index = max(readings)
+                published_date = today.replace(day=day).isoformat()
+                self._record_published_date(published_date)
                 return {
                     "volume": index,
                     "daily_volume": monthly["daily"].get(day),
-                    "reading_date": today.replace(day=day).isoformat(),
+                    "reading_date": published_date,
                 }
             # Les premiers jours du mois, le dernier index peut dater du mois précédent.
             previous_month = today.replace(day=1) - timedelta(days=1)
