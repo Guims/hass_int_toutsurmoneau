@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import toutsurmoneau
 from homeassistant.config_entries import ConfigEntry, ConfigEntryNotReady
@@ -68,6 +68,16 @@ class SafeSuezClient:
     async def async_contracts(self):
         """Liste des contrats Suez."""
         return await self._call("async_contracts")
+
+    @property
+    def blocked_until(self) -> str | None:
+        """Heure de fin du blocage de sécurité, si actif."""
+        timestamp = float(self._entry.data.get("blocked_until", 0))
+        if time.time() >= timestamp:
+            return None
+        return dt_util.as_local(
+            datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        ).isoformat()
 
     @property
     def last_request_time(self) -> str | None:
