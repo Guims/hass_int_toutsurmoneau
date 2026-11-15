@@ -2,8 +2,7 @@
 from __future__ import annotations
 
 import logging
-import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 
 import toutsurmoneau
 from homeassistant.config_entries import ConfigEntry, ConfigEntryNotReady
@@ -16,7 +15,7 @@ from .const import DOMAIN, VERSION
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS: list[Platform] = [Platform.SENSOR]
-COOLDOWN_SECONDS = int(timedelta(hours=24).total_seconds())
+ONE_TIME_RETRY_VERSION = "0.0.27"
 
 
 class SafeSuezClient:
@@ -54,50 +53,28 @@ class SafeSuezClient:
         )
 
     @property
-    def cooldown_remaining_seconds(self) -> float:
-        return max(0.0, float(self._entry.data.get("blocked_until", 0)) - time.time())
-
-    @property
     def meter_id(self) -> str:
         """Identifiant du compteur."""
         return self._entry.data["meter_id"]
 
-    def _check_cooldown(self) -> None:
-        blocked_until = float(self._entry.data.get("blocked_until", 0))
-        if time.time() < blocked_until:
-            raise RuntimeError("Requêtes Suez suspendues pour 24 h après erreur")
-
-    def _block(self) -> None:
-        blocked_until = time.time() + COOLDOWN_SECONDS
-        self._hass.config_entries.async_update_entry(
-            self._entry, data={**self._entry.data, "blocked_until": blocked_until}
-        )
-        _LOGGER.warning(
-            "Communication Suez interrompue après une erreur. Aucun nouvel essai "
-            "automatique avant 24 h. Vérifiez le compte sur le site officiel."
-        )
-
     async def _call(self, method: str):
-        self._check_cooldown()
-        try:
-            return await getattr(self._client, method)()
-        except Exception:
-            self._block()
-            raise
+        """Un seul appel demandé, sans blocage automatique de 24 h."""
+        return await getattr(self._client, method)()
 
     async def async_contracts(self):
-        """Liste des contrats Suez."""
         return await self._call("async_contracts")
 
     @property
-    def blocked_until(self) -> str | None:
-        """Heure de fin du blocage de sécurité, si actif."""
-        timestamp = float(self._entry.data.get("blocked_until", 0))
-        if time.time() >= timestamp:
-            return None
-        return dt_util.as_local(
-            datetime.fromtimestamp(timestamp, tz=timezone.utc)
-        ).isoformat()
+    def blocked_until(self) -> None:
+        """Le blocage de 24 h a été désactivé."""
+        return None
+
+    def _can_use_one_time_retry(self) -> bool:
+        """Un seul essai exceptionnel pour cette mise à jour, même après redémarrage."""
+        return (
+            not self._readings_up_to_date()
+            and self._entry.data.get("suez_immediate_retry_version") != ONE_TIME_RETRY_VERSION
+        )
 
     @property
     def last_request_time(self) -> str | None:
@@ -185,8 +162,8 @@ class SafeSuezClient:
         )
         if self._readings_up_to_date():
             reason = "releve_deja_a_jour"
-        elif time.time() < float(self._entry.data.get("blocked_until", 0)):
-            reason = "suspension_24h"
+        elif self._can_use_one_time_retry():
+            reason = "essai_exceptionnel_v027"
         elif self._entry.data.get(key) == today:
             reason = "creneau_deja_tente"
         elif slot == "startup" and self._entry.data.get("last_suez_request_date") == today:
@@ -209,13 +186,12 @@ class SafeSuezClient:
         }
 
     def should_refresh_today(self) -> bool:
-        """Autoriser une relève matinale ET celle de 16 h, sans doublons."""
-        now = dt_util.now()
-        today = now.date().isoformat()
+        """Date du relevé d'abord, puis limite par créneau ou essai exceptionnel."""
         if self._readings_up_to_date():
             return False
-        if time.time() < float(self._entry.data.get("blocked_until", 0)):
-            return False
+        if self._can_use_one_time_retry():
+            return True
+        today = dt_util.now().date().isoformat()
         slot = self._request_slot()
         key = (
             "last_suez_startup_request_date"
@@ -224,8 +200,6 @@ class SafeSuezClient:
         )
         if self._entry.data.get(key) == today:
             return False
-        # Compatibilité avec la version 0.0.19 : une tentative déjà enregistrée
-        # aujourd'hui ne doit pas être répétée avant 16 h.
         if slot == "startup" and self._entry.data.get("last_suez_request_date") == today:
             return False
         return True
@@ -241,10 +215,12 @@ class SafeSuezClient:
             else "last_suez_scheduled_request_date"
         )
         today = dt_util.now().date().isoformat()
+        emergency = self._can_use_one_time_retry()
         self._hass.config_entries.async_update_entry(
             self._entry, data={
                 **self._entry.data,
                 key: today,
+                **({"suez_immediate_retry_version": ONE_TIME_RETRY_VERSION} if emergency else {}),
                 "last_suez_request_time": dt_util.now().isoformat(),
                 "last_suez_request_result": "reserve",
                 "last_suez_request_stage_time": dt_util.now().isoformat(),
@@ -264,7 +240,6 @@ class SafeSuezClient:
 
     async def async_latest_meter_reading(self):
         """Lire au maximum deux mois, sans répétition cachée en cas d'erreur."""
-        self._check_cooldown()
         self._check_and_mark_daily_request()
         today = dt_util.now().date()
         try:
@@ -310,7 +285,7 @@ class SafeSuezClient:
             # Le nom de la classe d'exception est suffisant pour diagnostiquer,
             # sans enregistrer URL, identifiant, mot de passe ou réponse brute.
             self._save_request_stage("echec", type(err).__name__, self._error_reason(err))
-            self._block()
+            _LOGGER.warning("Échec de relève Suez ; pas de nouvel essai automatique dans ce créneau")
             raise
 
 
