@@ -106,16 +106,38 @@ class ToutSurMonEauEntity(RestoreEntity, SensorEntity):
 
     @callback
     def _scheduled_refresh(self, now: datetime) -> None:
-        """Relevé de 16 h, indépendant de celui du matin."""
+        """Relevé de 16 h ou rattrapage après la fin du verrou de sécurité."""
         self._set_diagnostic_attributes()
         self.async_write_ha_state()
         if self._api.should_refresh_today():
             self.async_schedule_update_ha_state(force_refresh=True)
+            return
+
+        remaining = self._api.cooldown_remaining_seconds
+        if remaining > 0 and remaining < 24 * 3600:
+            # Si la tentative de la veille a échoué à 16:00:02, le
+            # verrou expire deux secondes après le rendez-vous suivant.
+            # Rattraper UNE fois, sans contourner les limites par date.
+            self.async_on_remove(
+                async_call_later(self.hass, remaining + 3, self._cooldown_refresh)
+            )
+            _LOGGER.info(
+                "Relève Suez reportée de %.0f secondes : protection active",
+                remaining + 3,
+            )
         else:
             _LOGGER.info(
                 "Relevé Suez de 16 h ignoré : %s",
                 self._api.request_diagnostics["suez_decision_releve"],
             )
+
+    @callback
+    def _cooldown_refresh(self, now: datetime) -> None:
+        """Une seule tentative de rattrapage, uniquement si autorisée."""
+        self._set_diagnostic_attributes()
+        self.async_write_ha_state()
+        if self._api.should_refresh_today():
+            self.async_schedule_update_ha_state(force_refresh=True)
 
     async def async_update(self) -> None:
         """Lire la donnée ; laisser la dernière valeur si Suez est indisponible."""
