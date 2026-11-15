@@ -39,6 +39,24 @@ class SafeSuezClient:
             session=async_get_clientsession(hass),
         )
 
+    def _new_meter_client(self):
+        """Client neuf pour la relève quotidienne, sans boucle de connexion.
+
+        L'ancien client gardait un verrou d'authentification après la première
+        connexion, ce qui empêchait de se reconnecter le lendemain.
+        """
+        return toutsurmoneau.AsyncClient(
+            username=self._entry.data["username"],
+            password=self._entry.data["password"],
+            meter_id=self._entry.data["meter_id"],
+            url=self._entry.data["url"],
+            session=async_get_clientsession(self._hass),
+        )
+
+    @property
+    def cooldown_remaining_seconds(self) -> float:
+        return max(0.0, float(self._entry.data.get("blocked_until", 0)) - time.time())
+
     @property
     def meter_id(self) -> str:
         """Identifiant du compteur."""
@@ -229,9 +247,11 @@ class SafeSuezClient:
         self._check_and_mark_daily_request()
         today = dt_util.now().date()
         try:
-            # L'appel commence ici ; la réservation seule n'est pas une réponse Suez.
+            # Instance neuve par relève autorisée : une nouvelle session peut
+            # être ouverte si les cookies Suez ont expiré depuis la veille.
+            client = self._new_meter_client()
             self._save_request_stage("appel_lance")
-            monthly = await self._client.async_daily_for_month(today)
+            monthly = await client.async_daily_for_month(today)
             self._save_request_stage("reponse_recue")
             readings = [
                 (day, value) for day, value in monthly["absolute"].items()
@@ -249,7 +269,7 @@ class SafeSuezClient:
             # Les premiers jours du mois, le dernier index peut dater du mois précédent.
             previous_month = today.replace(day=1) - timedelta(days=1)
             self._save_request_stage("appel_mois_precedent")
-            monthly = await self._client.async_daily_for_month(previous_month)
+            monthly = await client.async_daily_for_month(previous_month)
             self._save_request_stage("reponse_recue")
             readings = [
                 (day, value) for day, value in monthly["absolute"].items()
