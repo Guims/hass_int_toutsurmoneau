@@ -1,6 +1,6 @@
 """Constantes pour Tout sur mon eau."""
 
-VERSION = "0.0.27"
+VERSION = "0.0.28"
 DOMAIN = "portail_eau_fr"
 PREFIX_STEP = "async_step_"
 STEP_USER_START = "user"

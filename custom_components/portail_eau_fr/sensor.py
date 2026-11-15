@@ -1,6 +1,7 @@
 """Capteur Suez : rattrapage au démarrage et relève à 16 h."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
 
@@ -13,7 +14,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfVolume
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import async_call_later, async_track_time_change
+from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.core import callback
 
@@ -42,6 +43,7 @@ class ToutSurMonEauEntity(RestoreEntity, SensorEntity):
 
     def __init__(self, api) -> None:
         self._api = api
+        self._refresh_lock = asyncio.Lock()
         # Conserver le même unique_id que le projet initial.
         self._attr_unique_id = "unique_id_with_meter"
         self._attr_name = f"Suez meter {api.meter_id}"
@@ -74,26 +76,22 @@ class ToutSurMonEauEntity(RestoreEntity, SensorEntity):
             )
         )
 
-        # Avant 16 h : une relève au démarrage (sans doublon après redémarrage).
-        # À 16 h : nouvelle relève autorisée, même après celle du matin.
-        # Après 16 h : rattrapage si le créneau de 16 h a été manqué.
-        self.async_on_remove(
-            async_call_later(self.hass, 3, self._startup_refresh)
-        )
-
-    @callback
-    def _startup_refresh(self, now: datetime) -> None:
-        """Exécuter le rattrapage après l'ajout complet du capteur."""
-        self._set_diagnostic_attributes()
-        self.async_write_ha_state()
+        # Rattrapage immédiat lors de l'ajout de l'entité, sans timer.
+        # Les attributs seront publiés par Home Assistant après l'ajout.
         if self._api.should_refresh_today():
-            _LOGGER.info("Rattrapage du relevé Suez au démarrage")
-            self.async_schedule_update_ha_state(force_refresh=True)
+            _LOGGER.info("Rattrapage Suez au démarrage : récupération lancée")
+            await self._refresh_from_suez()
         else:
             _LOGGER.info(
                 "Rattrapage Suez ignoré : %s",
                 self._api.request_diagnostics["suez_decision_releve"],
             )
+        self._set_diagnostic_attributes()
+
+    async def _refresh_from_suez(self) -> None:
+        """Sérialiser les relevés au démarrage et à 16 h."""
+        async with self._refresh_lock:
+            await self.async_update()
 
     def _set_diagnostic_attributes(self) -> None:
         """Exposer les dernières tentatives sans effectuer de requête HTTP."""
@@ -106,16 +104,21 @@ class ToutSurMonEauEntity(RestoreEntity, SensorEntity):
 
     @callback
     def _scheduled_refresh(self, now: datetime) -> None:
-        """Actualiser à 16 h uniquement si la date publiée est en retard."""
-        self._set_diagnostic_attributes()
-        self.async_write_ha_state()
+        """Déclencher le relevé de 16 h comme tâche asynchrone explicite."""
+        self.hass.async_create_task(self._async_scheduled_refresh())
+
+    async def _async_scheduled_refresh(self) -> None:
+        """Collecter directement sans dépendre du polling de l'entité."""
         if self._api.should_refresh_today():
-            self.async_schedule_update_ha_state(force_refresh=True)
+            _LOGGER.info("Relevé Suez de 16 h : récupération lancée")
+            await self._refresh_from_suez()
         else:
             _LOGGER.info(
-                "Relevé Suez non lancé : %s",
+                "Relevé Suez ignoré : %s",
                 self._api.request_diagnostics["suez_decision_releve"],
             )
+        self._set_diagnostic_attributes()
+        self.async_write_ha_state()
 
     async def async_update(self) -> None:
         """Lire la donnée ; laisser la dernière valeur si Suez est indisponible."""
