@@ -109,7 +109,25 @@ class SafeSuezClient:
         """Dernier résultat observable, sans détails HTTP sensibles."""
         return self._entry.data.get("last_suez_request_result")
 
-    def _save_request_stage(self, stage: str, error_type: str | None = None) -> None:
+    @staticmethod
+    def _error_reason(error: Exception) -> str:
+        """Diagnostic limité à des catégories, sans URL ou données privées."""
+        message = str(error).lower()
+        if "session expired" in message or "authentication previously failed" in message:
+            return "session_expiree"
+        if "authentication required" in message:
+            return "authentification_requise"
+        if "authentication failed" in message or "authentication rejected" in message:
+            return "authentification_refusee"
+        if "api rejected" in message or "api returned an error" in message:
+            return "reponse_api_refusee"
+        if "unexpected api content type" in message:
+            return "reponse_non_json"
+        if "http error" in message:
+            return "erreur_http"
+        return "autre_erreur"
+
+    def _save_request_stage(self, stage: str, error_type: str | None = None, error_reason: str | None = None) -> None:
         """Conserver le stade atteint, sans secret ni requête additionnelle."""
         self._hass.config_entries.async_update_entry(
             self._entry,
@@ -118,6 +136,7 @@ class SafeSuezClient:
                 "last_suez_request_result": stage,
                 "last_suez_request_stage_time": dt_util.now().isoformat(),
                 "last_suez_error_type": error_type,
+                "last_suez_error_reason": error_reason,
             },
         )
         _LOGGER.info("Relevé Suez : étape %s", stage)
@@ -185,6 +204,7 @@ class SafeSuezClient:
             "suez_etape_derniere_tentative": self._entry.data.get("last_suez_request_result") or "inconnue",
             "suez_heure_derniere_etape": self._entry.data.get("last_suez_request_stage_time"),
             "suez_type_derniere_erreur": self._entry.data.get("last_suez_error_type"),
+            "suez_cause_derniere_erreur": self._entry.data.get("last_suez_error_reason"),
             "suez_date_releve_retournee": self._entry.data.get("last_suez_returned_reading_date"),
         }
 
@@ -229,6 +249,7 @@ class SafeSuezClient:
                 "last_suez_request_result": "reserve",
                 "last_suez_request_stage_time": dt_util.now().isoformat(),
                 "last_suez_error_type": None,
+                "last_suez_error_reason": None,
             }
         )
 
@@ -288,7 +309,7 @@ class SafeSuezClient:
         except Exception as err:
             # Le nom de la classe d'exception est suffisant pour diagnostiquer,
             # sans enregistrer URL, identifiant, mot de passe ou réponse brute.
-            self._save_request_stage("echec", type(err).__name__)
+            self._save_request_stage("echec", type(err).__name__, self._error_reason(err))
             self._block()
             raise
 
